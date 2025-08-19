@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Invoice Generator — 玲瓏國際 Exquis International</title>
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Theme color for mobile browsers -->
+  <meta name="theme-color" content="#667eea">
+
+  <!-- iOS specific meta tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Invoice Generator">
+  <link rel="apple-touch-icon" href="icons/icon-152x152.png">
+
+  <!-- Android Chrome -->
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <!-- jsPDF + AutoTable -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js"></script>
+
+  <style>
+    :root{
+      --bg-1:#667eea; --bg-2:#764ba2; --ink:#1f2937; --muted:#6b7280; --ring:#a5b4fc;
+    }
+    *{box-sizing:border-box}
+    body{font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans TC", Arial, sans-serif; background:linear-gradient(135deg,var(--bg-1),var(--bg-2)); min-height:100vh; padding:24px}
+    .container{max-width:960px;margin:0 auto;background:#fff;border-radius:20px;box-shadow:0 20px 40px rgba(0,0,0,.12);overflow:hidden}
+    .header{background:linear-gradient(135deg,#2c3e50,#34495e);color:#fff;padding:28px 32px}
+    .header h1{font-size:28px;margin:0 0 6px}
+    .header p{opacity:.9;margin:0}
+    .form{padding:32px}
+    .section{margin:0 0 24px;padding:20px;background:linear-gradient(135deg,#f8f9fa,#eef2f7);border-left:5px solid var(--bg-1);border-radius:14px}
+    .section h2{font-size:18px;margin:0 0 12px;color:#111827}
+    .row{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+    .group{display:flex;flex-direction:column}
+    .group.full{grid-column:1 / -1}
+    label{font-weight:600;color:#111827;margin:0 0 6px}
+    input,textarea,select{padding:12px 14px;border:2px solid #e5e7eb;border-radius:10px;font-size:14px;background:#fff}
+    input:focus,textarea:focus,select:focus{outline:none;border-color:var(--ring);box-shadow:0 0 0 3px rgba(165,180,252,.25)}
+    textarea{min-height:80px;resize:vertical}
+
+    .items h2{display:flex;align-items:center;gap:8px}
+    .item-row{display:grid;grid-template-columns:80px 2fr 80px 100px 120px 40px;gap:12px;align-items:end;margin:12px 0;padding:16px;border:2px solid #eef2f7;border-radius:12px;background:#fff}
+    .item-row:hover{border-color:#c7d2fe;transform:translateY(-1px);transition:all .2s}
+    .btn{border:0;border-radius:10px;padding:10px 16px;color:#fff;background:linear-gradient(135deg,var(--bg-1),var(--bg-2));cursor:pointer}
+    .btn.secondary{background:linear-gradient(135deg,#9ca3af,#6b7280)}
+    .btn.remove{background:linear-gradient(135deg,#ef4444,#b91c1c);width:40px;height:40px;font-size:20px;line-height:0}
+    .actions{display:flex;gap:10px;justify-content:center;border-top:2px solid #eef2f7;margin-top:24px;padding-top:24px}
+    .total-card{background:linear-gradient(135deg,#111827,#334155);color:#fff;padding:20px;border-radius:14px;text-align:center;margin-top:16px}
+    .total-card h3{margin:0 0 6px}
+    .total-amount{font-size:24px;font-weight:800}
+
+    /* PWA Status and Refresh Button */
+    .top-right-controls{position:fixed;top:10px;right:10px;display:flex;gap:8px;z-index:1000}
+    .pwa-status{background:#10b981;color:white;padding:8px 12px;border-radius:20px;font-size:12px;display:none}
+    .refresh-btn{background:linear-gradient(135deg,var(--bg-1),var(--bg-2));color:white;border:none;padding:8px 12px;border-radius:20px;font-size:12px;cursor:pointer;font-weight:600;display:flex;align-items:center;gap:4px;box-shadow:0 2px 8px rgba(0,0,0,0.15);transition:all 0.2s ease}
+    .refresh-btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.2)}
+    .refresh-btn:active{transform:translateY(0)}
+
+    @media (max-width: 820px){
+      .row{grid-template-columns:1fr}
+      .item-row{grid-template-columns:1fr}
+      body{padding:12px}
+      .form{padding:20px}
+      .section{padding:16px}
+      .top-right-controls{top:5px;right:5px}
+      .refresh-btn{padding:6px 10px;font-size:11px}
+      .pwa-status{padding:6px 10px;font-size:11px}
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Right Controls -->
+  <div class="top-right-controls">
+    <div id="pwaStatus" class="pwa-status">📱 App Ready</div>
+    <button id="refreshBtn" class="refresh-btn" title="Clear form and start new invoice">
+      <span>🔄</span>
+      <span>New Invoice</span>
+    </button>
+  </div>
+
+  <div class="container">
+    <div class="header">
+      <h1>玲瓏國際 Exquis International</h1>
+      <p>Invoice Generator</p>
+    </div>
+
+    <form id="invoiceForm" class="form">
+      <div class="section">
+        <h2>Company Information</h2>
+        <div class="row">
+          <div class="group full">
+            <label for="companyAddress">Company Address / 公司地址</label>
+            <textarea id="companyAddress" name="companyAddress" rows="2">新界粉嶺嶺仔安居花園306號三樓</textarea>
+          </div>
+        </div>
+        <div class="row">
+          <div class="group">
+            <label for="companyPhone">Company Phone / 公司電話</label>
+            <input id="companyPhone" name="companyPhone" value="93859172" />
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Invoice Information</h2>
+        <div class="row">
+          <div class="group">
+            <label for="invoiceNo">Invoice No.</label>
+            <input id="invoiceNo" name="invoiceNo" required />
+          </div>
+          <div class="group">
+            <label for="invoiceDate">Date</label>
+            <input type="date" id="invoiceDate" name="invoiceDate" required />
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Client Information</h2>
+        <div class="row">
+          <div class="group full">
+            <label for="clientTo">To / 收件人</label>
+            <input id="clientTo" name="clientTo" required />
+          </div>
+        </div>
+        <div class="row">
+          <div class="group full">
+            <label for="clientAddress">Address / 地址</label>
+            <textarea id="clientAddress" name="clientAddress" rows="3"></textarea>
+          </div>
+        </div>
+        <div class="row">
+          <div class="group">
+            <label for="clientTel">Tel / 電話</label>
+            <input id="clientTel" name="clientTel" />
+          </div>
+          <div class="group">
+            <label for="clientAttn">Attn / 聯絡人</label>
+            <input id="clientAttn" name="clientAttn" />
+          </div>
+        </div>
+      </div>
+
+      <div class="section items">
+        <h2>🛒 Invoice Items</h2>
+        <div id="itemsContainer"></div>
+        <button class="btn secondary" type="button" id="addItemBtn">Add Item</button>
+      </div>
+
+      <div class="section">
+        <h2>Payment Method / 付款方式</h2>
+        <div class="row">
+          <div class="group full">
+            <label for="paymentMethod">Payment Method / 付款方式</label>
+            <textarea id="paymentMethod" name="paymentMethod" rows="4" placeholder="Bank transfer, Cash, Cheque, etc.">Bank transfer 銀行轉賬
+Bank of China 中國銀行
+Account Name 帳戶名稱: Exquis International
+Account Number 帳戶號碼: 012-55120072480</textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="total-card">
+        <h3>Total Amount / 總金額</h3>
+        <div id="totalAmount" class="total-amount">$0.00</div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" type="button" id="generateBtn">Generate PDF Invoice</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    // Register Service Worker for PWA functionality (offline-only)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('sw.js')
+          .then(function(registration) {
+            console.log('ServiceWorker registration successful - App ready for offline use');
+            showPWAStatus('📱 Offline App Ready');
+          })
+          .catch(function(err) {
+            console.log('ServiceWorker registration failed (this is normal if sw.js file is missing)');
+            console.log('App will still work, but without offline caching');
+            showPWAStatus('📱 App Ready (No Caching)');
+          });
+      });
+    } else {
+      showPWAStatus('📱 App Ready');
+    }
+
+    // PWA Status Functions
+    function showPWAStatus(message) {
+      const status = document.getElementById('pwaStatus');
+      status.textContent = message;
+      status.style.display = 'block';
+      setTimeout(() => {
+        status.style.display = 'none';
+      }, 3000);
+    }
+
+    // Refresh/Clear Form Function
+    function clearForm() {
+      // Show confirmation dialog
+      if (confirm('Are you sure you want to clear the form and start a new invoice?')) {
+        // Reset the form
+        document.getElementById('invoiceForm').reset();
+        
+        // Clear all items and add a fresh one
+        document.getElementById('itemsContainer').innerHTML = '';
+        itemCount = 0;
+        addItem();
+        
+        // Reset date to today
+        document.getElementById('invoiceDate').value = new Date().toISOString().split('T')[0];
+        
+        // Reset company defaults
+        document.getElementById('companyAddress').value = '新界粉嶺嶺仔安居花園306號三樓';
+        document.getElementById('companyPhone').value = '93859172';
+        document.getElementById('paymentMethod').value = `Bank transfer 銀行轉賬
+Bank of China 中國銀行
+Account Name 帳戶名稱: Exquis International
+Account Number 帳戶號碼: 012-55120072480`;
+        
+        // Recalculate total
+        calculateTotal();
+        
+        // Show status
+        showPWAStatus('🔄 New Invoice Ready!');
+        
+        // Focus on invoice number field
+        document.getElementById('invoiceNo').focus();
+      }
+    }
+
+    // ===== Original Invoice Functions =====
+    const currency = (n)=> new Intl.NumberFormat('en-US',{style:'currency',currency:'HKD',minimumFractionDigits:2}).format(Number(n||0));
+    let itemCount = 0;
+
+    window.addEventListener('load', ()=>{
+      addItem();
+      document.getElementById('invoiceDate').value = new Date().toISOString().split('T')[0];
+    });
+
+    document.getElementById('addItemBtn').addEventListener('click', addItem);
+    document.getElementById('generateBtn').addEventListener('click', ()=> generatePDF().catch(err=>{alert('Failed to generate PDF: '+err.message);}));
+    document.getElementById('refreshBtn').addEventListener('click', clearForm);
+
+    function addItem(){
+      itemCount++;
+      const el = document.createElement('div');
+      el.className='item-row';
+      el.id = `item-${itemCount}`;
+      el.innerHTML = `
+        <div class="group"><label>Item No.</label><input name="itemNo" value="${itemCount}"/></div>
+        <div class="group"><label>Description / 描述</label><textarea name="description" rows="2" style="min-height:60px;resize:vertical" required></textarea></div>
+        <div class="group"><label>Qty / 數量</label><input type="number" name="qty" min="1" value="1" oninput="calculateTotal()" required/></div>
+        <div class="group"><label>Unit Price / 單價</label><input type="number" name="unitPrice" min="0" step="0.01" oninput="calculateTotal()" required/></div>
+        <div class="group"><label>Total / 小計</label><input name="itemTotal" readonly style="background:#f8fafc"/></div>
+        <div class="group"><label>&nbsp;</label><button type="button" class="btn remove" title="Remove" onclick="removeItem(${itemCount})">×</button></div>`;
+      document.getElementById('itemsContainer').appendChild(el);
+      calculateTotal();
+    }
+
+    function removeItem(id){
+      const row = document.getElementById(`item-${id}`);
+      if(row && document.querySelectorAll('.item-row').length>1){
+        row.remove();
+        calculateTotal();
+      }
+    }
+
+    function calculateTotal(){
+      let total = 0;
+      document.querySelectorAll('.item-row').forEach(row=>{
+        const qty = parseFloat(row.querySelector('[name="qty"]').value) || 0;
+        const price = parseFloat(row.querySelector('[name="unitPrice"]').value) || 0;
+        const sub = qty * price;
+        row.querySelector('[name="itemTotal"]').value = currency(sub).replace('HK$','');
+        total += sub;
+      });
+      document.getElementById('totalAmount').textContent = currency(total);
+    }
+
+    // ===== Font loader (CJK-safe) =====
+    async function ensureCJKFont(doc){
+      const fontName = 'NotoSansTC';
+      if(doc.getFontList && doc.getFontList()[fontName]){
+        doc.setFont(fontName, 'normal');
+        return fontName;
+      }
+      // Try to load the font - fallback to default if not available
+      try {
+        const url = './NotoSansTC-Regular.ttf';
+        const res = await fetch(url);
+        if(!res.ok) throw new Error('Font file not found');
+        const buf = await res.arrayBuffer();
+        const uint = new Uint8Array(buf);
+        let binary = '';
+        for(let i=0;i<uint.length;i++){ binary += String.fromCharCode(uint[i]); }
+        const b64 = btoa(binary);
+        doc.addFileToVFS('NotoSansTC-Regular.ttf', b64);
+        doc.addFont('NotoSansTC-Regular.ttf', fontName, 'normal');
+        doc.addFont('NotoSansTC-Regular.ttf', fontName, 'bold');
+        doc.setFont(fontName, 'normal');
+        return fontName;
+      } catch (e) {
+        console.log('Using default font (Chinese characters may not display correctly)');
+        return 'helvetica';
+      }
+    }
+
+    // ===== PDF generation =====
+    async function generatePDF(){
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit:'mm', format:'a4' });
+
+      const fontName = await ensureCJKFont(doc);
+      const margin = 16;
+      let y = margin;
+
+      const form = new FormData(document.getElementById('invoiceForm'));
+      const rows = [...document.querySelectorAll('.item-row')].map(row=>{
+        const qty = parseFloat(row.querySelector('[name="qty"]').value)||0;
+        const price = parseFloat(row.querySelector('[name="unitPrice"]').value)||0;
+        const total = qty*price;
+        return {
+          itemNo: row.querySelector('[name="itemNo"]').value || '',
+          desc: row.querySelector('[name="description"]').value || '',
+          qty,
+          unitPrice: price, total
+        };
+      });
+      const grandTotal = rows.reduce((s,r)=>s+r.total,0);
+
+      // Header
+      doc.setFont(fontName, 'bold');
+      doc.setFontSize(18);
+      doc.text('玲瓏國際 Exquis International', margin, y);
+      y += 8;
+      
+      // Company details
+      doc.setFont(fontName, 'normal');
+      doc.setFontSize(10);
+      const companyAddress = (form.get('companyAddress')||'').trim();
+      if(companyAddress) {
+        doc.text(`Address 地址: ${companyAddress}`, margin, y);
+        y += 6;
+      }
+      const companyPhone = (form.get('companyPhone')||'').trim();
+      if(companyPhone) {
+        doc.text(`Phone 電話: ${companyPhone}`, margin, y);
+        y += 8;
+      } else {
+        y += 2;
+      }
+
+      // INVOICE header - right aligned
+      doc.setFont(fontName, 'bold');
+      doc.setFontSize(28);
+      const pageWidth = 210;
+      const invoiceHeaderX = pageWidth - margin - doc.getTextWidth('INVOICE');
+      doc.text('INVOICE', invoiceHeaderX, margin);
+      
+      // Invoice details - right aligned with proper margin handling
+      doc.setFont(fontName, 'normal');
+      doc.setFontSize(12);
+      
+      // Invoice Number - handle long numbers
+      const invoiceNo = `Invoice No 發票號碼：${form.get('invoiceNo')||''}`;
+      const invoiceNoWidth = doc.getTextWidth(invoiceNo);
+      const maxRightSideWidth = pageWidth - 105; // Leave space for left side content
+      
+      if (invoiceNoWidth > maxRightSideWidth) {
+        // If too long, use smaller font or wrap
+        doc.setFontSize(10);
+        const wrappedInvoiceNo = doc.splitTextToSize(invoiceNo, maxRightSideWidth);
+        doc.text(wrappedInvoiceNo, pageWidth - margin - maxRightSideWidth, margin + 12);
+        doc.setFontSize(12); // Reset font size
+      } else {
+        doc.text(invoiceNo, pageWidth - margin - invoiceNoWidth, margin + 12);
+      }
+      
+      // Format date
+      const dateValue = form.get('invoiceDate') || '';
+      let formattedDate = dateValue;
+      if(dateValue) {
+        const date = new Date(dateValue);
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        formattedDate = `${day}/${month}/${year}`;
+      }
+      
+      // Date - handle positioning
+      const dateText = `Date 日期：${formattedDate}`;
+      const dateWidth = doc.getTextWidth(dateText);
+      
+      if (dateWidth > maxRightSideWidth) {
+        doc.setFontSize(10);
+        const wrappedDate = doc.splitTextToSize(dateText, maxRightSideWidth);
+        doc.text(wrappedDate, pageWidth - margin - maxRightSideWidth, margin + 25);
+        doc.setFontSize(12);
+      } else {
+        doc.text(dateText, pageWidth - margin - dateWidth, margin + 22);
+      }
+      
+      y += 15;
+
+      // Client information
+      doc.setFont(fontName, 'normal');
+      doc.setFontSize(12);
+      doc.text('To:', margin, y);
+      y += 8;
+      
+      const clientTo = form.get('clientTo') || '';
+      if(clientTo) {
+        const toLines = doc.splitTextToSize(clientTo, 210 - margin*2);
+        doc.text(toLines, margin, y);
+        y += toLines.length * 6 + 3;
+      }
+
+      const addr = (form.get('clientAddress')||'').trim();
+      if(addr){
+        const addrLines = doc.splitTextToSize(addr, 210 - margin*2);
+        doc.text(addrLines, margin, y);
+        y += addrLines.length * 6 + 3;
+      }
+
+      const attn = (form.get('clientAttn')||'').trim();
+      if(attn){ 
+        doc.text(attn, margin, y); 
+        y += 9; 
+      }
+
+      const tel = (form.get('clientTel')||'').trim();
+      if(tel){ 
+        doc.text(tel, margin, y); 
+        y += 15; 
+      } else {
+        y += 6;
+      }
+
+      // Items table
+      const head = [[ 'Item No.', 'Description / 描述', 'Qty / 數量', 'Unit Price / 單價', 'Total / 小計' ]];
+      const body = rows.map(r=>[
+        r.itemNo,
+        r.desc,
+        String(r.qty),
+        (r.unitPrice).toFixed(2),
+        (r.total).toFixed(2)
+      ]);
+
+      doc.autoTable({
+        startY: y,
+        head, body,
+        styles: { font: fontName, fontSize: 10, cellPadding: 3, lineWidth: 0.3, lineColor: [0,0,0] },
+        headStyles: { fillColor: [255,255,255], textColor: [0,0,0], fontStyle: 'bold' },
+        bodyStyles: { fillColor: [255,255,255], textColor: [0,0,0] },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 18 },
+          1: { cellWidth: 85 },
+          2: { halign: 'right', cellWidth: 22 },
+          3: { halign: 'right', cellWidth: 28 },
+          4: { halign: 'right', cellWidth: 25 }
+        },
+        bodyStyles: { valign: 'top' },
+        didParseCell: (data)=>{
+          if(data.section==='body' && data.column.index===1){
+            data.cell.styles.cellWidth = 85;
+          }
+        },
+        margin: { left: margin, right: margin }
+      });
+
+      const afterTableY = doc.lastAutoTable.finalY + 4;
+
+      // Total amount
+      doc.setFont(fontName, 'bold');
+      doc.setFontSize(12);
+      const label = 'Total Amount 總金額：HKD ';
+      const labelW = doc.getTextWidth(label);
+      const formattedAmount = new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(grandTotal);
+      const amtW = doc.getTextWidth(formattedAmount);
+      const xRight = 210 - margin;
+      doc.text(label, xRight - (labelW + amtW), afterTableY + 8);
+      doc.text(formattedAmount, xRight - amtW, afterTableY + 8);
+
+      const afterTotalY = afterTableY + 8 + 3;
+
+      // Payment method
+      const paymentMethod = (form.get('paymentMethod')||'').trim();
+      if(paymentMethod){
+        doc.setFont(fontName, 'bold');
+        doc.text('Payment Method 付款方式：', margin, afterTotalY);
+        doc.setFont(fontName, 'normal');
+        const paymentLines = doc.splitTextToSize(paymentMethod, 210 - margin*2);
+        doc.text(paymentLines, margin, afterTotalY + 7);
+      }
+
+      // Save PDF
+      const fileName = `Invoice_${(form.get('invoiceNo')||'')}_${(form.get('invoiceDate')||'')}.pdf`;
+      doc.save(fileName);
+      
+      showPWAStatus('📄 PDF Generated Successfully!');
+    }
+  </script>
+</body>
+</html>
